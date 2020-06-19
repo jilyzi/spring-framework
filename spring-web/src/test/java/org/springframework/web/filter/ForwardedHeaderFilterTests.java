@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2019 the original author or authors.
+ * Copyright 2002-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package org.springframework.web.filter;
 
 import java.io.IOException;
 import java.util.Enumeration;
+
 import javax.servlet.DispatcherType;
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
@@ -26,12 +27,12 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import org.springframework.mock.web.test.MockFilterChain;
-import org.springframework.mock.web.test.MockHttpServletRequest;
-import org.springframework.mock.web.test.MockHttpServletResponse;
+import org.springframework.web.testfixture.servlet.MockFilterChain;
+import org.springframework.web.testfixture.servlet.MockHttpServletRequest;
+import org.springframework.web.testfixture.servlet.MockHttpServletResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -46,9 +47,13 @@ import static org.mockito.Mockito.mock;
 public class ForwardedHeaderFilterTests {
 
 	private static final String X_FORWARDED_PROTO = "x-forwarded-proto";  // SPR-14372 (case insensitive)
+
 	private static final String X_FORWARDED_HOST = "x-forwarded-host";
+
 	private static final String X_FORWARDED_PORT = "x-forwarded-port";
+
 	private static final String X_FORWARDED_PREFIX = "x-forwarded-prefix";
+
 	private static final String X_FORWARDED_SSL = "x-forwarded-ssl";
 
 
@@ -59,7 +64,7 @@ public class ForwardedHeaderFilterTests {
 	private MockFilterChain filterChain;
 
 
-	@Before
+	@BeforeEach
 	@SuppressWarnings("serial")
 	public void setup() throws Exception {
 		this.request = new MockHttpServletRequest();
@@ -347,6 +352,24 @@ public class ForwardedHeaderFilterTests {
 
 		HttpServletRequest actual = filterAndGetWrappedRequest();
 		assertThat(actual.getRequestURL().toString()).isEqualTo("http://localhost/prefix/mvc-showcase");
+	}
+
+	@Test
+	void shouldConcatenatePrefixes() throws Exception {
+		this.request.addHeader(X_FORWARDED_PREFIX, "/first,/second");
+		this.request.setRequestURI("/mvc-showcase");
+
+		HttpServletRequest actual = filterAndGetWrappedRequest();
+		assertThat(actual.getRequestURL().toString()).isEqualTo("http://localhost/first/second/mvc-showcase");
+	}
+
+	@Test
+	void shouldConcatenatePrefixesWithTrailingSlashes() throws Exception {
+		this.request.addHeader(X_FORWARDED_PREFIX, "/first/,/second//");
+		this.request.setRequestURI("/mvc-showcase");
+
+		HttpServletRequest actual = filterAndGetWrappedRequest();
+		assertThat(actual.getRequestURL().toString()).isEqualTo("http://localhost/first/second/mvc-showcase");
 	}
 
 	@Test
