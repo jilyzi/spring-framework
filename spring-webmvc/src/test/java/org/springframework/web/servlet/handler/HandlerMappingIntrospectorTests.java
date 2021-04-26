@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.springframework.web.servlet.handler;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -39,11 +40,16 @@ import org.springframework.web.context.support.StaticWebApplicationContext;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.servlet.HandlerExecutionChain;
 import org.springframework.web.servlet.HandlerMapping;
+import org.springframework.web.servlet.function.RouterFunction;
+import org.springframework.web.servlet.function.RouterFunctions;
+import org.springframework.web.servlet.function.ServerResponse;
+import org.springframework.web.servlet.function.support.RouterFunctionMapping;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.springframework.web.testfixture.servlet.MockHttpServletRequest;
 import org.springframework.web.util.ServletRequestPathUtils;
 import org.springframework.web.util.pattern.PathPattern;
 import org.springframework.web.util.pattern.PathPatternParser;
+import org.springframework.web.util.pattern.PatternParseException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
@@ -97,21 +103,11 @@ public class HandlerMappingIntrospectorTests {
 		assertThat(actual).isEqualTo(expected);
 	}
 
-	void defaultHandlerMappings() {
-		StaticWebApplicationContext context = new StaticWebApplicationContext();
-		context.refresh();
-		List<HandlerMapping> actual = initIntrospector(context).getHandlerMappings();
-
-		assertThat(actual.size()).isEqualTo(2);
-		assertThat(actual.get(0).getClass()).isEqualTo(BeanNameUrlHandlerMapping.class);
-		assertThat(actual.get(1).getClass()).isEqualTo(RequestMappingHandlerMapping.class);
-	}
-
 	@ParameterizedTest
 	@ValueSource(booleans = {true, false})
 	void getMatchable(boolean usePathPatterns) throws Exception {
 
-		PathPatternParser parser = new PathPatternParser();
+		TestPathPatternParser parser = new TestPathPatternParser();
 
 		GenericWebApplicationContext context = new GenericWebApplicationContext();
 		context.registerBean("mapping", SimpleUrlHandlerMapping.class, () -> {
@@ -125,25 +121,18 @@ public class HandlerMappingIntrospectorTests {
 		context.refresh();
 
 		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/path/123");
-
-		// Initialize the RequestPath. At runtime, ServletRequestPathFilter is expected to do that.
-		if (usePathPatterns) {
-			ServletRequestPathUtils.parseAndCache(request);
-		}
-
 		MatchableHandlerMapping mapping = initIntrospector(context).getMatchableHandlerMapping(request);
 
 		assertThat(mapping).isNotNull();
-		assertThat(mapping).isEqualTo(context.getBean("mapping"));
 		assertThat(request.getAttribute(BEST_MATCHING_PATTERN_ATTRIBUTE)).as("Attribute changes not ignored").isNull();
+		assertThat(request.getAttribute(ServletRequestPathUtils.PATH_ATTRIBUTE)).as("Parsed path not cleaned").isNull();
 
-		String pattern = "/p*/*";
-		PathPattern pathPattern = parser.parse(pattern);
-		assertThat(usePathPatterns ? mapping.match(request, pathPattern) : mapping.match(request, pattern)).isNotNull();
+		assertThat(mapping.match(request, "/p*/*")).isNotNull();
+		assertThat(mapping.match(request, "/b*/*")).isNull();
 
-		pattern = "/b*/*";
-		pathPattern = parser.parse(pattern);
-		assertThat(usePathPatterns ? mapping.match(request, pathPattern) : mapping.match(request, pattern)).isNull();
+		if (usePathPatterns) {
+			assertThat(parser.getParsedPatterns()).containsExactly("/path/*", "/p*/*", "/b*/*");
+		}
 	}
 
 	@Test
@@ -154,6 +143,22 @@ public class HandlerMappingIntrospectorTests {
 
 		MockHttpServletRequest request = new MockHttpServletRequest();
 		assertThatIllegalStateException().isThrownBy(() -> initIntrospector(cxt).getMatchableHandlerMapping(request));
+	}
+
+	@Test // gh-26833
+	void getMatchablePreservesRequestAttributes() throws Exception {
+		AnnotationConfigWebApplicationContext context = new AnnotationConfigWebApplicationContext();
+		context.register(TestConfig.class);
+		context.refresh();
+
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/path");
+		request.setAttribute("name", "value");
+
+		MatchableHandlerMapping matchable = initIntrospector(context).getMatchableHandlerMapping(request);
+		assertThat(matchable).isNotNull();
+
+		// RequestPredicates.restoreAttributes clears and re-adds attributes
+		assertThat(request.getAttribute("name")).isEqualTo("value");
 	}
 
 	@Test
@@ -210,13 +215,27 @@ public class HandlerMappingIntrospectorTests {
 	static class TestConfig {
 
 		@Bean
+		public RouterFunctionMapping routerFunctionMapping() {
+			RouterFunctionMapping mapping = new RouterFunctionMapping();
+			mapping.setOrder(1);
+			return mapping;
+		}
+
+		@Bean
 		public RequestMappingHandlerMapping handlerMapping() {
-			return new RequestMappingHandlerMapping();
+			RequestMappingHandlerMapping mapping = new RequestMappingHandlerMapping();
+			mapping.setOrder(2);
+			return mapping;
 		}
 
 		@Bean
 		public TestController testController() {
 			return new TestController();
+		}
+
+		@Bean
+		public RouterFunction<?> routerFunction() {
+			return RouterFunctions.route().GET("/fn-path", request -> ServerResponse.ok().build()).build();
 		}
 	}
 
@@ -227,6 +246,22 @@ public class HandlerMappingIntrospectorTests {
 
 		@PostMapping("/path")
 		void handle() {
+		}
+	}
+
+	private static class TestPathPatternParser extends PathPatternParser {
+
+		private final List<String> parsedPatterns = new ArrayList<>();
+
+
+		public List<String> getParsedPatterns() {
+			return this.parsedPatterns;
+		}
+
+		@Override
+		public PathPattern parse(String pathPattern) throws PatternParseException {
+			this.parsedPatterns.add(pathPattern);
+			return super.parse(pathPattern);
 		}
 	}
 

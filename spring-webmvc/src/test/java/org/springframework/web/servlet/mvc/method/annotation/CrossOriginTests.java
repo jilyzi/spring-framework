@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,10 +55,11 @@ import org.springframework.web.util.ServletRequestPathUtils;
 import org.springframework.web.util.pattern.PathPatternParser;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 /**
- * Test fixture for {@link CrossOrigin @CrossOrigin} annotated methods.
+ * Tests for {@link CrossOrigin @CrossOrigin} annotated methods.
  *
  * @author Sebastien Deleuze
  * @author Sam Brannen
@@ -72,6 +73,7 @@ class CrossOriginTests {
 		StaticWebApplicationContext wac = new StaticWebApplicationContext();
 		Properties props = new Properties();
 		props.setProperty("myOrigin", "https://example.com");
+		props.setProperty("myDomainPattern", "http://*.example.com");
 		wac.getEnvironment().getPropertySources().addFirst(new PropertiesPropertySource("ps", props));
 		wac.registerSingleton("ppc", PropertySourcesPlaceholderConfigurer.class);
 		wac.refresh();
@@ -82,6 +84,7 @@ class CrossOriginTests {
 
 		TestRequestMappingInfoHandlerMapping mapping2 = new TestRequestMappingInfoHandlerMapping();
 		wac.getAutowireCapableBeanFactory().initializeBean(mapping2, "mapping2");
+		wac.close();
 
 		return Stream.of(mapping1, mapping2);
 	}
@@ -197,11 +200,49 @@ class CrossOriginTests {
 	}
 
 	@PathPatternsParameterizedTest
+	public void customOriginPatternViaValueAttribute(TestRequestMappingInfoHandlerMapping mapping) throws Exception {
+		mapping.registerHandler(new MethodLevelController());
+		this.request.setRequestURI("/customOriginPattern");
+		HandlerExecutionChain chain = mapping.getHandler(request);
+		CorsConfiguration config = getCorsConfiguration(chain, false);
+		assertThat(config).isNotNull();
+		assertThat(config.getAllowedOrigins()).isNull();
+		assertThat(config.getAllowedOriginPatterns()).isEqualTo(Collections.singletonList("http://*.example.com"));
+		assertThat(config.getAllowCredentials()).isNull();
+	}
+
+	@PathPatternsParameterizedTest
+	public void customOriginPatternViaPlaceholder(TestRequestMappingInfoHandlerMapping mapping) throws Exception {
+		mapping.registerHandler(new MethodLevelController());
+		this.request.setRequestURI("/customOriginPatternPlaceholder");
+		HandlerExecutionChain chain = mapping.getHandler(request);
+		CorsConfiguration config = getCorsConfiguration(chain, false);
+		assertThat(config).isNotNull();
+		assertThat(config.getAllowedOrigins()).isNull();
+		assertThat(config.getAllowedOriginPatterns()).isEqualTo(Collections.singletonList("http://*.example.com"));
+		assertThat(config.getAllowCredentials()).isNull();
+	}
+
+	@PathPatternsParameterizedTest
 	void bogusAllowCredentialsValue(TestRequestMappingInfoHandlerMapping mapping) {
-		assertThatIllegalStateException().isThrownBy(() ->
-				mapping.registerHandler(new MethodLevelControllerWithBogusAllowCredentialsValue()))
-			.withMessageContaining("@CrossOrigin's allowCredentials")
-			.withMessageContaining("current value is [bogus]");
+		assertThatIllegalStateException()
+				.isThrownBy(() -> mapping.registerHandler(new MethodLevelControllerWithBogusAllowCredentialsValue()))
+				.withMessageContaining("@CrossOrigin's allowCredentials")
+				.withMessageContaining("current value is [bogus]");
+	}
+
+	@PathPatternsParameterizedTest
+	void allowCredentialsWithDefaultOrigin(TestRequestMappingInfoHandlerMapping mapping) {
+		assertThatIllegalArgumentException()
+				.isThrownBy(() -> mapping.registerHandler(new CredentialsWithDefaultOriginController()))
+				.withMessageContaining("When allowCredentials is true, allowedOrigins cannot contain");
+	}
+
+	@PathPatternsParameterizedTest
+	void allowCredentialsWithWildcardOrigin(TestRequestMappingInfoHandlerMapping mapping) {
+		assertThatIllegalArgumentException()
+				.isThrownBy(() -> mapping.registerHandler(new CredentialsWithWildcardOriginController()))
+				.withMessageContaining("When allowCredentials is true, allowedOrigins cannot contain");
 	}
 
 	@PathPatternsParameterizedTest
@@ -229,7 +270,8 @@ class CrossOriginTests {
 		config = getCorsConfiguration(chain, false);
 		assertThat(config).isNotNull();
 		assertThat(config.getAllowedMethods()).containsExactly("GET");
-		assertThat(config.getAllowedOrigins()).containsExactly("*");
+		assertThat(config.getAllowedOrigins()).isNull();
+		assertThat(config.getAllowedOriginPatterns()).containsExactly("*");
 		assertThat(config.getAllowCredentials()).isTrue();
 	}
 
@@ -287,7 +329,8 @@ class CrossOriginTests {
 		CorsConfiguration config = getCorsConfiguration(chain, true);
 		assertThat(config).isNotNull();
 		assertThat(config.getAllowedMethods()).containsExactly("*");
-		assertThat(config.getAllowedOrigins()).containsExactly("*");
+		assertThat(config.getAllowedOrigins()).isNull();
+		assertThat(config.getAllowedOriginPatterns()).containsExactly("*");
 		assertThat(config.getAllowedHeaders()).containsExactly("*");
 		assertThat(config.getAllowCredentials()).isTrue();
 		assertThat(CollectionUtils.isEmpty(config.getExposedHeaders())).isTrue();
@@ -304,7 +347,8 @@ class CrossOriginTests {
 		CorsConfiguration config = getCorsConfiguration(chain, true);
 		assertThat(config).isNotNull();
 		assertThat(config.getAllowedMethods()).containsExactly("*");
-		assertThat(config.getAllowedOrigins()).containsExactly("*");
+		assertThat(config.getAllowedOrigins()).isNull();
+		assertThat(config.getAllowedOriginPatterns()).containsExactly("*");
 		assertThat(config.getAllowedHeaders()).containsExactly("*");
 		assertThat(config.getAllowCredentials()).isTrue();
 		assertThat(CollectionUtils.isEmpty(config.getExposedHeaders())).isTrue();
@@ -318,6 +362,27 @@ class CrossOriginTests {
 		assertThat(mapping.getHandler(request)).isNull();
 	}
 
+	@PathPatternsParameterizedTest
+	void maxAgeWithDefaultOrigin(TestRequestMappingInfoHandlerMapping mapping) throws Exception {
+		mapping.registerHandler(new MaxAgeWithDefaultOriginController());
+
+		this.request.setRequestURI("/classAge");
+		HandlerExecutionChain chain = mapping.getHandler(request);
+		CorsConfiguration config = getCorsConfiguration(chain, false);
+		assertThat(config).isNotNull();
+		assertThat(config.getAllowedMethods()).containsExactly("GET");
+		assertThat(config.getAllowedOrigins()).containsExactly("*");
+		assertThat(config.getMaxAge()).isEqualTo(10);
+
+		this.request.setRequestURI("/methodAge");
+		chain = mapping.getHandler(request);
+		config = getCorsConfiguration(chain, false);
+		assertThat(config).isNotNull();
+		assertThat(config.getAllowedMethods()).containsExactly("GET");
+		assertThat(config.getAllowedOrigins()).containsExactly("*");
+		assertThat(config.getMaxAge()).isEqualTo(100);
+	}
+
 
 	@Nullable
 	private CorsConfiguration getCorsConfiguration(@Nullable HandlerExecutionChain chain, boolean isPreFlightRequest) {
@@ -329,13 +394,10 @@ class CrossOriginTests {
 			return (CorsConfiguration)accessor.getPropertyValue("config");
 		}
 		else {
-			HandlerInterceptor[] interceptors = chain.getInterceptors();
-			if (interceptors != null) {
-				for (HandlerInterceptor interceptor : interceptors) {
-					if (interceptor.getClass().getSimpleName().equals("CorsInterceptor")) {
-						DirectFieldAccessor accessor = new DirectFieldAccessor(interceptor);
-						return (CorsConfiguration) accessor.getPropertyValue("config");
-					}
+			for (HandlerInterceptor interceptor : chain.getInterceptorList()) {
+				if (interceptor.getClass().getSimpleName().equals("CorsInterceptor")) {
+					DirectFieldAccessor accessor = new DirectFieldAccessor(interceptor);
+					return (CorsConfiguration) accessor.getPropertyValue("config");
 				}
 			}
 		}
@@ -406,6 +468,16 @@ class CrossOriginTests {
 		@RequestMapping("/someOrigin")
 		public void customOriginDefinedViaPlaceholder() {
 		}
+
+		@CrossOrigin(originPatterns = "http://*.example.com")
+		@RequestMapping("/customOriginPattern")
+		public void customOriginPatternDefinedViaValueAttribute() {
+		}
+
+		@CrossOrigin(originPatterns = "${myDomainPattern}")
+		@RequestMapping("/customOriginPatternPlaceholder")
+		public void customOriginPatternDefinedViaPlaceholder() {
+		}
 	}
 
 
@@ -433,11 +505,45 @@ class CrossOriginTests {
 		public void bar() {
 		}
 
-		@CrossOrigin(allowCredentials = "true")
+		@CrossOrigin(originPatterns = "*", allowCredentials = "true")
 		@RequestMapping(path = "/baz", method = RequestMethod.GET)
 		public void baz() {
 		}
+	}
 
+	@Controller
+	@CrossOrigin(maxAge = 10)
+	private static class MaxAgeWithDefaultOriginController {
+
+		@CrossOrigin
+		@GetMapping("/classAge")
+		void classAge() {
+		}
+
+		@CrossOrigin(maxAge = 100)
+		@GetMapping("/methodAge")
+		void methodAge() {
+		}
+	}
+
+	@Controller
+	@CrossOrigin(allowCredentials = "true")
+	private static class CredentialsWithDefaultOriginController {
+
+		@GetMapping(path = "/no-origin")
+		public void noOrigin() {
+		}
+	}
+
+
+	@Controller
+	@CrossOrigin(allowCredentials = "true")
+	private static class CredentialsWithWildcardOriginController {
+
+		@GetMapping(path = "/no-origin")
+		@CrossOrigin(origins = "*")
+		public void wildcardOrigin() {
+		}
 	}
 
 
@@ -459,6 +565,8 @@ class CrossOriginTests {
 		@RequestMapping(path = "/foo", method = RequestMethod.GET)
 		public void foo() {
 		}
+
+
 	}
 
 

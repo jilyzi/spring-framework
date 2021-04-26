@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,6 +38,7 @@ import org.springframework.util.StringUtils;
  *
  * @author Rossen Stoyanchev
  * @author Sebastien Deleuze
+ * @author Brian Clozel
  * @since 5.0
  */
 class DefaultServerHttpRequestBuilder implements ServerHttpRequest.Builder {
@@ -57,6 +58,9 @@ class DefaultServerHttpRequestBuilder implements ServerHttpRequest.Builder {
 	@Nullable
 	private SslInfo sslInfo;
 
+	@Nullable
+	private InetSocketAddress remoteAddress;
+
 	private Flux<DataBuffer> body;
 
 	private final ServerHttpRequest originalRequest;
@@ -68,6 +72,8 @@ class DefaultServerHttpRequestBuilder implements ServerHttpRequest.Builder {
 		this.uri = original.getURI();
 		this.headers = HttpHeaders.writableHttpHeaders(original.getHeaders());
 		this.httpMethodValue = original.getMethodValue();
+		this.contextPath = original.getPath().contextPath().value();
+		this.remoteAddress = original.getRemoteAddress();
 		this.body = original.getBody();
 		this.originalRequest = original;
 	}
@@ -118,9 +124,15 @@ class DefaultServerHttpRequestBuilder implements ServerHttpRequest.Builder {
 	}
 
 	@Override
+	public ServerHttpRequest.Builder remoteAddress(InetSocketAddress remoteAddress) {
+		this.remoteAddress = remoteAddress;
+		return this;
+	}
+
+	@Override
 	public ServerHttpRequest build() {
 		return new MutatedServerHttpRequest(getUriToUse(), this.contextPath,
-				this.httpMethodValue, this.sslInfo, this.body, this.originalRequest);
+				this.httpMethodValue, this.sslInfo, this.remoteAddress, this.headers, this.body, this.originalRequest);
 	}
 
 	private URI getUriToUse() {
@@ -169,18 +181,22 @@ class DefaultServerHttpRequestBuilder implements ServerHttpRequest.Builder {
 		@Nullable
 		private final SslInfo sslInfo;
 
+		@Nullable
+		private InetSocketAddress remoteAddress;
+
 		private final Flux<DataBuffer> body;
 
 		private final ServerHttpRequest originalRequest;
 
 
 		public MutatedServerHttpRequest(URI uri, @Nullable String contextPath,
-				String methodValue, @Nullable SslInfo sslInfo,
-				Flux<DataBuffer> body, ServerHttpRequest originalRequest) {
+				String methodValue, @Nullable SslInfo sslInfo, @Nullable InetSocketAddress remoteAddress,
+				HttpHeaders headers, Flux<DataBuffer> body, ServerHttpRequest originalRequest) {
 
-			super(uri, contextPath, originalRequest.getHeaders());
+			super(uri, contextPath, headers);
 			this.methodValue = methodValue;
-			this.sslInfo = sslInfo != null ? sslInfo : originalRequest.getSslInfo();
+			this.remoteAddress = (remoteAddress != null ? remoteAddress : originalRequest.getRemoteAddress());
+			this.sslInfo = (sslInfo != null ? sslInfo : originalRequest.getSslInfo());
 			this.body = body;
 			this.originalRequest = originalRequest;
 		}
@@ -204,7 +220,7 @@ class DefaultServerHttpRequestBuilder implements ServerHttpRequest.Builder {
 		@Override
 		@Nullable
 		public InetSocketAddress getRemoteAddress() {
-			return this.originalRequest.getRemoteAddress();
+			return this.remoteAddress;
 		}
 
 		@Override
@@ -221,7 +237,7 @@ class DefaultServerHttpRequestBuilder implements ServerHttpRequest.Builder {
 		@SuppressWarnings("unchecked")
 		@Override
 		public <T> T getNativeRequest() {
-			return (T) this.originalRequest;
+			return ServerHttpRequestDecorator.getNativeRequest(this.originalRequest);
 		}
 
 		@Override

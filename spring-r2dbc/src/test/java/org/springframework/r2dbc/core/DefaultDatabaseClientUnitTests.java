@@ -46,6 +46,7 @@ import org.springframework.lang.Nullable;
 import org.springframework.r2dbc.core.binding.BindMarkersFactory;
 import org.springframework.r2dbc.core.binding.BindTarget;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.doReturn;
@@ -66,7 +67,7 @@ import static org.mockito.BDDMockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-public class DefaultDatabaseClientUnitTests {
+class DefaultDatabaseClientUnitTests {
 
 	@Mock
 	Connection connection;
@@ -74,7 +75,8 @@ public class DefaultDatabaseClientUnitTests {
 	private DatabaseClient.Builder databaseClientBuilder;
 
 	@BeforeEach
-	public void before() {
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	void before() {
 		ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
 
 		when(connectionFactory.create()).thenReturn((Publisher) Mono.just(connection));
@@ -85,7 +87,16 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void shouldCloseConnectionOnlyOnce() {
+	void connectionFactoryIsExposed() {
+		ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
+		DatabaseClient databaseClient = DatabaseClient.builder()
+				.connectionFactory(connectionFactory)
+				.bindMarkers(BindMarkersFactory.anonymous("?")).build();
+		assertThat(databaseClient.getConnectionFactory()).isSameAs(connectionFactory);
+	}
+
+	@Test
+	void shouldCloseConnectionOnlyOnce() {
 		DefaultDatabaseClient databaseClient = (DefaultDatabaseClient) databaseClientBuilder.build();
 
 		Flux<Object> flux = databaseClient.inConnectionMany(connection -> Flux.empty());
@@ -118,7 +129,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void executeShouldBindNullValues() {
+	void executeShouldBindNullValues() {
 		Statement statement = mockStatementFor("SELECT * FROM table WHERE key = $1");
 
 		DatabaseClient databaseClient = databaseClientBuilder.namedParameters(false).build();
@@ -135,7 +146,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void executeShouldBindSettableValues() {
+	void executeShouldBindSettableValues() {
 		Statement statement = mockStatementFor("SELECT * FROM table WHERE key = $1");
 
 		DatabaseClient databaseClient = databaseClientBuilder.namedParameters(false).build();
@@ -154,7 +165,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void executeShouldBindNamedNullValues() {
+	void executeShouldBindNamedNullValues() {
 
 		Statement statement = mockStatementFor("SELECT * FROM table WHERE key = $1");
 		DatabaseClient databaseClient = databaseClientBuilder.build();
@@ -166,7 +177,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void executeShouldBindNamedValuesFromIndexes() {
+	void executeShouldBindNamedValuesFromIndexes() {
 		Statement statement = mockStatementFor(
 				"SELECT id, name, manual FROM legoset WHERE name IN ($1, $2, $3)");
 
@@ -185,7 +196,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void executeShouldBindValues() {
+	void executeShouldBindValues() {
 		Statement statement = mockStatementFor("SELECT * FROM table WHERE key = $1");
 
 		DatabaseClient databaseClient = databaseClientBuilder.build();
@@ -202,7 +213,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void executeShouldBindNamedValuesByIndex() {
+	void executeShouldBindNamedValuesByIndex() {
 
 		Statement statement = mockStatementFor("SELECT * FROM table WHERE key = $1");
 		DatabaseClient databaseClient = databaseClientBuilder.build();
@@ -214,11 +225,11 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void rowsUpdatedShouldEmitSingleValue() {
+	@SuppressWarnings("unchecked")
+	void rowsUpdatedShouldEmitSingleValue() {
 
 		Result result = mock(Result.class);
-		when(result.getRowsUpdated()).thenReturn(Mono.empty(), Mono.just(2),
-				Flux.just(1, 2, 3));
+		when(result.getRowsUpdated()).thenReturn(Mono.empty(), Mono.just(2), Flux.just(1, 2, 3));
 		mockStatementFor("DROP TABLE tab;", result);
 
 		DatabaseClient databaseClient = databaseClientBuilder.build();
@@ -234,7 +245,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void selectShouldEmitFirstValue() {
+	void selectShouldEmitFirstValue() {
 		MockRowMetadata metadata = MockRowMetadata.builder().columnMetadata(
 				MockColumnMetadata.builder().name("name").build()).build();
 
@@ -254,7 +265,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void selectShouldEmitAllValues() {
+	void selectShouldEmitAllValues() {
 		MockRowMetadata metadata = MockRowMetadata.builder().columnMetadata(
 				MockColumnMetadata.builder().name("name").build()).build();
 
@@ -275,7 +286,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void selectOneShouldFailWithException() {
+	void selectOneShouldFailWithException() {
 
 		MockRowMetadata metadata = MockRowMetadata.builder().columnMetadata(
 				MockColumnMetadata.builder().name("name").build()).build();
@@ -295,7 +306,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void shouldApplyExecuteFunction() {
+	void shouldApplyExecuteFunction() {
 
 		Statement statement = mockStatement();
 		MockResult result = mockSingleColumnResult(
@@ -311,7 +322,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void shouldApplyPreparedOperation() {
+	void shouldApplyPreparedOperation() {
 
 		MockResult result = mockSingleColumnResult(
 				MockRow.builder().identified(0, Object.class, "Walter"));
@@ -342,7 +353,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void shouldApplyStatementFilterFunctions() {
+	void shouldApplyStatementFilterFunctions() {
 
 		MockRowMetadata metadata = MockRowMetadata.builder().columnMetadata(
 				MockColumnMetadata.builder().name("name").build()).build();
@@ -366,7 +377,7 @@ public class DefaultDatabaseClientUnitTests {
 	}
 
 	@Test
-	public void shouldApplySimpleStatementFilterFunctions() {
+	void shouldApplySimpleStatementFilterFunctions() {
 
 		MockResult result = mockSingleColumnEmptyResult();
 

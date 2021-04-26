@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -93,6 +93,7 @@ public class SimpleUrlHandlerMappingTests {
 		Object otherBean = wac.getBean("otherController");
 		Object defaultBean = wac.getBean("starController");
 		HandlerMapping hm = (HandlerMapping) wac.getBean(beanName);
+		wac.close();
 
 		boolean usePathPatterns = (((AbstractHandlerMapping) hm).getPatternParser() != null);
 		MockHttpServletRequest request = PathPatternsTestUtils.initRequest("GET", "/welcome.html", usePathPatterns);
@@ -102,6 +103,12 @@ public class SimpleUrlHandlerMappingTests {
 		assertThat(request.getAttribute(BEST_MATCHING_HANDLER_ATTRIBUTE)).isEqualTo(bean);
 
 		request = PathPatternsTestUtils.initRequest("GET", "/welcome.x", usePathPatterns);
+		chain = getHandler(hm, request);
+		assertThat(chain.getHandler()).isSameAs(otherBean);
+		assertThat(request.getAttribute(PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE)).isEqualTo("welcome.x");
+		assertThat(request.getAttribute(BEST_MATCHING_HANDLER_ATTRIBUTE)).isEqualTo(otherBean);
+
+		request = PathPatternsTestUtils.initRequest("GET", "/app", "/welcome.x", usePathPatterns);
 		chain = getHandler(hm, request);
 		assertThat(chain.getHandler()).isSameAs(otherBean);
 		assertThat(request.getAttribute(PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE)).isEqualTo("welcome.x");
@@ -120,6 +127,7 @@ public class SimpleUrlHandlerMappingTests {
 		request = PathPatternsTestUtils.initRequest("GET", "/app", "/welcome.html", usePathPatterns);
 		chain = getHandler(hm, request);
 		assertThat(chain.getHandler()).isSameAs(bean);
+
 
 		request = PathPatternsTestUtils.initRequest("GET", "/show.html", usePathPatterns);
 		chain = getHandler(hm, request);
@@ -157,11 +165,8 @@ public class SimpleUrlHandlerMappingTests {
 
 	private HandlerExecutionChain getHandler(HandlerMapping mapping, MockHttpServletRequest request) throws Exception {
 		HandlerExecutionChain chain = mapping.getHandler(request);
-		HandlerInterceptor[] interceptors = chain.getInterceptors();
-		if (interceptors != null) {
-			for (HandlerInterceptor interceptor : interceptors) {
-				interceptor.preHandle(request, null, chain.getHandler());
-			}
+		for (HandlerInterceptor interceptor : chain.getInterceptorList()) {
+			interceptor.preHandle(request, null, chain.getHandler());
 		}
 		return chain;
 	}

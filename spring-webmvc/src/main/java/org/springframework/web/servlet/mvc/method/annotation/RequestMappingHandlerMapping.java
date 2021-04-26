@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -411,10 +411,10 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 
 	@Override
 	public RequestMatchResult match(HttpServletRequest request, String pattern) {
-		Assert.isNull(getPatternParser(), "This HandlerMapping requires a PathPattern.");
+		Assert.isNull(getPatternParser(), "This HandlerMapping requires a PathPattern");
 		RequestMappingInfo info = RequestMappingInfo.paths(pattern).options(this.config).build();
 		RequestMappingInfo match = info.getMatchingCondition(request);
-		return (match != null ?
+		return (match != null && match.getPatternsCondition() != null ?
 				new RequestMatchResult(
 						match.getPatternsCondition().getPatterns().iterator().next(),
 						UrlPathHelper.getResolvedLookupPath(request),
@@ -451,6 +451,9 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 		for (String origin : annotation.origins()) {
 			config.addAllowedOrigin(resolveCorsAnnotationValue(origin));
 		}
+		for (String patterns : annotation.originPatterns()) {
+			config.addAllowedOriginPattern(resolveCorsAnnotationValue(patterns));
+		}
 		for (RequestMethod method : annotation.methods()) {
 			config.addAllowedMethod(method.name());
 		}
@@ -473,7 +476,7 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 					"or an empty string (\"\"): current value is [" + allowCredentials + "]");
 		}
 
-		if (annotation.maxAge() >= 0 && config.getMaxAge() == null) {
+		if (annotation.maxAge() >= 0 ) {
 			config.setMaxAge(annotation.maxAge());
 		}
 	}

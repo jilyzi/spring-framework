@@ -27,6 +27,7 @@ import org.springframework.util.ObjectUtils;
  * A database value that can be set in a statement.
  *
  * @author Mark Paluch
+ * @author Juergen Hoeller
  * @since 5.3
  */
 public final class Parameter {
@@ -35,6 +36,7 @@ public final class Parameter {
 	private final Object value;
 
 	private final Class<?> type;
+
 
 	private Parameter(@Nullable Object value, Class<?> type) {
 		Assert.notNull(type, "Type must not be null");
@@ -45,7 +47,7 @@ public final class Parameter {
 
 	/**
 	 * Create a new {@link Parameter} from {@code value}.
-	 * @param value must not be {@code null}
+	 * @param value the parameter value
 	 * @return the {@link Parameter} value for {@code value}
 	 */
 	public static Parameter from(Object value) {
@@ -55,12 +57,12 @@ public final class Parameter {
 
 	/**
 	 * Create a new {@link Parameter} from {@code value} and {@code type}.
-	 * @param value can be {@code null}
-	 * @param type must not be {@code null}
+	 * @param value the parameter value (can be {@code null})
+	 * @param type the parameter type
 	 * @return the {@link Parameter} value for {@code value}
 	 */
 	public static Parameter fromOrEmpty(@Nullable Object value, Class<?> type) {
-		return value == null ? empty(type) : new Parameter(value, ClassUtils.getUserClass(value));
+		return (value == null ? empty(type) : new Parameter(value, ClassUtils.getUserClass(value)));
 	}
 
 	/**
@@ -74,8 +76,7 @@ public final class Parameter {
 
 
 	/**
-	 * Returns the column value. Can be {@code null}.
-	 * @return the column value. Can be {@code null}
+	 * Return the column value (can be {@code null}).
 	 * @see #hasValue()
 	 */
 	@Nullable
@@ -84,39 +85,40 @@ public final class Parameter {
 	}
 
 	/**
-	 * Returns the column value type. Must be also present if the {@code value} is {@code null}.
-	 * @return the column value type
+	 * Return the column value type. Must be also present if the {@code value} is {@code null}.
 	 */
 	public Class<?> getType() {
 		return this.type;
 	}
 
 	/**
-	 * Returns whether this {@link Parameter} has a value.
-	 * @return whether this {@link Parameter} has a value. {@code false} if {@link #getValue()} is {@code null}
+	 * Return whether this {@link Parameter} has a value.
+	 * @return {@code false} if {@link #getValue()} is {@code null}
 	 */
 	public boolean hasValue() {
-		return this.value != null;
+		return (this.value != null);
 	}
 
 	/**
-	 * Returns whether this {@link Parameter} has a empty.
-	 * @return whether this {@link Parameter} is empty. {@code true} if {@link #getValue()} is {@code null}
+	 * Return whether this {@link Parameter} has a empty.
+	 * @return {@code true} if {@link #getValue()} is {@code null}
 	 */
 	public boolean isEmpty() {
-		return this.value == null;
+		return (this.value == null);
 	}
 
+
 	@Override
-	public boolean equals(Object o) {
-		if (this == o) {
+	public boolean equals(Object obj) {
+		if (this == obj) {
 			return true;
 		}
-		if (!(o instanceof Parameter)) {
+		if (!(obj instanceof Parameter)) {
 			return false;
 		}
-		Parameter other = (Parameter) o;
-		return ObjectUtils.nullSafeEquals(this.value, other.value) && ObjectUtils.nullSafeEquals(this.type, other.type);
+		Parameter other = (Parameter) obj;
+		return (ObjectUtils.nullSafeEquals(this.value, other.value) &&
+				ObjectUtils.nullSafeEquals(this.type, other.type));
 	}
 
 	@Override
@@ -126,12 +128,7 @@ public final class Parameter {
 
 	@Override
 	public String toString() {
-		StringBuffer sb = new StringBuffer();
-		sb.append("Parameter");
-		sb.append("[value=").append(this.value);
-		sb.append(", type=").append(this.type);
-		sb.append(']');
-		return sb.toString();
+		return "Parameter[value=" + this.value + ",type=" + this.type.getName() + "]";
 	}
 
 }

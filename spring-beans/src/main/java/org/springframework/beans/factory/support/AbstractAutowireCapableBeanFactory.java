@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -73,6 +73,7 @@ import org.springframework.beans.factory.config.TypedStringValue;
 import org.springframework.core.DefaultParameterNameDiscoverer;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.NamedThreadLocal;
+import org.springframework.core.NativeDetector;
 import org.springframework.core.ParameterNameDiscoverer;
 import org.springframework.core.PriorityOrdered;
 import org.springframework.core.ResolvableType;
@@ -124,7 +125,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		implements AutowireCapableBeanFactory {
 
 	/** Strategy for creating bean instances. */
-	private InstantiationStrategy instantiationStrategy = new CglibSubclassingInstantiationStrategy();
+	private InstantiationStrategy instantiationStrategy;
 
 	/** Resolver strategy for method parameter names. */
 	@Nullable
@@ -176,6 +177,12 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		ignoreDependencyInterface(BeanNameAware.class);
 		ignoreDependencyInterface(BeanFactoryAware.class);
 		ignoreDependencyInterface(BeanClassLoaderAware.class);
+		if (NativeDetector.inNativeImage()) {
+			this.instantiationStrategy = new SimpleInstantiationStrategy();
+		}
+		else {
+			this.instantiationStrategy = new CglibSubclassingInstantiationStrategy();
+		}
 	}
 
 	/**
@@ -1008,6 +1015,11 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 				throw ex;
 			}
 			catch (BeanCreationException ex) {
+				// Don't swallow a linkage error since it contains a full stacktrace on
+				// first occurrence... and just a plain NoClassDefFoundError afterwards.
+				if (ex.contains(LinkageError.class)) {
+					throw ex;
+				}
 				// Instantiation failure, maybe too early...
 				if (logger.isDebugEnabled()) {
 					logger.debug("Bean creation exception on singleton FactoryBean type check: " + ex);

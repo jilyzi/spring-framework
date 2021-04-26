@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,8 @@ package org.springframework.web.servlet.handler;
 
 import javax.servlet.http.HttpServletRequest;
 
-import org.springframework.http.server.PathContainer;
 import org.springframework.lang.Nullable;
 import org.springframework.web.servlet.HandlerMapping;
-import org.springframework.web.util.ServletRequestPathUtils;
-import org.springframework.web.util.pattern.PathPattern;
 import org.springframework.web.util.pattern.PathPatternParser;
 
 /**
@@ -42,27 +39,14 @@ public interface MatchableHandlerMapping extends HandlerMapping {
 	 * @since 5.3
 	 */
 	@Nullable
-	PathPatternParser getPatternParser();
-
-	/**
-	 * Determine whether the request matches the given pattern. Use this method
-	 * when {@link #getPatternParser()} is not {@code null} which means that the
-	 * {@code HandlerMapping} has pre-parsed patterns enabled.
-	 * @param request the current request
-	 * @param pattern the pattern to match
-	 * @return the result from request matching, or {@code null} if none
-	 * @since 5.3
-	 */
-	@Nullable
-	default RequestMatchResult match(HttpServletRequest request, PathPattern pattern) {
-		PathContainer path = ServletRequestPathUtils.getParsedRequestPath(request).pathWithinApplication();
-		return (pattern.matches(path) ? new RequestMatchResult(pattern, path) : null);
+	default PathPatternParser getPatternParser() {
+		return null;
 	}
 
 	/**
 	 * Determine whether the request matches the given pattern. Use this method
 	 * when {@link #getPatternParser()} returns {@code null} which means that the
-	 * {@code HandlerMapping} is uses String pattern matching.
+	 * {@code HandlerMapping} is using String pattern matching.
 	 * @param request the current request
 	 * @param pattern the pattern to match
 	 * @return the result from request matching, or {@code null} if none

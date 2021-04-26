@@ -31,6 +31,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 import org.springframework.context.annotation.ScopedProxyMode;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.annotation.SendToUser;
@@ -59,6 +60,7 @@ import static org.springframework.web.socket.messaging.StompTextMessageBuilder.c
  *
  * @author Rossen Stoyanchev
  * @author Sam Brannen
+ * @author Sebastien Deleuze
  */
 class StompWebSocketIntegrationTests extends AbstractWebSocketIntegrationTests {
 
@@ -72,20 +74,19 @@ class StompWebSocketIntegrationTests extends AbstractWebSocketIntegrationTests {
 
 
 	@ParameterizedWebSocketTest
-	@SuppressWarnings("try")
 	void sendMessageToController(WebSocketTestServer server, WebSocketClient webSocketClient, TestInfo testInfo) throws Exception {
 		super.setup(server, webSocketClient, testInfo);
 
 		TextMessage message = create(StompCommand.SEND).headers("destination:/app/simple").build();
 
-		try (@SuppressWarnings("unused")WebSocketSession session = doHandshake(new TestClientWebSocketHandler(0, message), "/ws").get()) {
+		try (WebSocketSession session = doHandshake(new TestClientWebSocketHandler(0, message), "/ws").get()) {
+			assertThat(session).isNotNull();
 			SimpleController controller = this.wac.getBean(SimpleController.class);
 			assertThat(controller.latch.await(TIMEOUT, TimeUnit.SECONDS)).isTrue();
 		}
 	}
 
 	@ParameterizedWebSocketTest
-	@SuppressWarnings("try")
 	void sendMessageToControllerAndReceiveReplyViaTopic(WebSocketTestServer server, WebSocketClient webSocketClient, TestInfo testInfo) throws Exception {
 		super.setup(server, webSocketClient, testInfo);
 
@@ -98,12 +99,12 @@ class StompWebSocketIntegrationTests extends AbstractWebSocketIntegrationTests {
 		TestClientWebSocketHandler clientHandler = new TestClientWebSocketHandler(2, m0, m1, m2);
 
 		try (WebSocketSession session = doHandshake(clientHandler, "/ws").get()) {
+			assertThat(session).isNotNull();
 			assertThat(clientHandler.latch.await(TIMEOUT, TimeUnit.SECONDS)).isTrue();
 		}
 	}
 
 	@ParameterizedWebSocketTest  // SPR-10930
-	@SuppressWarnings("try")
 	void sendMessageToBrokerAndReceiveReplyViaTopic(WebSocketTestServer server, WebSocketClient webSocketClient, TestInfo testInfo) throws Exception {
 		super.setup(server, webSocketClient, testInfo);
 
@@ -114,6 +115,7 @@ class StompWebSocketIntegrationTests extends AbstractWebSocketIntegrationTests {
 		TestClientWebSocketHandler clientHandler = new TestClientWebSocketHandler(2, m0, m1, m2);
 
 		try (WebSocketSession session = doHandshake(clientHandler, "/ws").get()) {
+			assertThat(session).isNotNull();
 			assertThat(clientHandler.latch.await(TIMEOUT, TimeUnit.SECONDS)).isTrue();
 
 			String payload = clientHandler.actual.get(1).getPayload();
@@ -122,7 +124,6 @@ class StompWebSocketIntegrationTests extends AbstractWebSocketIntegrationTests {
 	}
 
 	@ParameterizedWebSocketTest  // SPR-11648
-	@SuppressWarnings("try")
 	void sendSubscribeToControllerAndReceiveReply(WebSocketTestServer server, WebSocketClient webSocketClient, TestInfo testInfo) throws Exception {
 		super.setup(server, webSocketClient, testInfo);
 
@@ -133,6 +134,7 @@ class StompWebSocketIntegrationTests extends AbstractWebSocketIntegrationTests {
 		TestClientWebSocketHandler clientHandler = new TestClientWebSocketHandler(2, m0, m1);
 
 		try (WebSocketSession session = doHandshake(clientHandler, "/ws").get()) {
+			assertThat(session).isNotNull();
 			assertThat(clientHandler.latch.await(TIMEOUT, TimeUnit.SECONDS)).isTrue();
 			String payload = clientHandler.actual.get(1).getPayload();
 			assertThat(payload.contains(destHeader)).as("Expected STOMP destination=/app/number, got " + payload).isTrue();
@@ -141,7 +143,6 @@ class StompWebSocketIntegrationTests extends AbstractWebSocketIntegrationTests {
 	}
 
 	@ParameterizedWebSocketTest
-	@SuppressWarnings("try")
 	void handleExceptionAndSendToUser(WebSocketTestServer server, WebSocketClient webSocketClient, TestInfo testInfo) throws Exception {
 		super.setup(server, webSocketClient, testInfo);
 
@@ -153,6 +154,7 @@ class StompWebSocketIntegrationTests extends AbstractWebSocketIntegrationTests {
 		TestClientWebSocketHandler clientHandler = new TestClientWebSocketHandler(2, m0, m1, m2);
 
 		try (WebSocketSession session = doHandshake(clientHandler, "/ws").get()) {
+			assertThat(session).isNotNull();
 			assertThat(clientHandler.latch.await(TIMEOUT, TimeUnit.SECONDS)).isTrue();
 			String payload = clientHandler.actual.get(1).getPayload();
 			assertThat(payload.startsWith("MESSAGE\n")).isTrue();
@@ -162,7 +164,6 @@ class StompWebSocketIntegrationTests extends AbstractWebSocketIntegrationTests {
 	}
 
 	@ParameterizedWebSocketTest
-	@SuppressWarnings("try")
 	void webSocketScope(WebSocketTestServer server, WebSocketClient webSocketClient, TestInfo testInfo) throws Exception {
 		super.setup(server, webSocketClient, testInfo);
 
@@ -175,6 +176,7 @@ class StompWebSocketIntegrationTests extends AbstractWebSocketIntegrationTests {
 		TestClientWebSocketHandler clientHandler = new TestClientWebSocketHandler(2, m0, m1, m2);
 
 		try (WebSocketSession session = doHandshake(clientHandler, "/ws").get()) {
+			assertThat(session).isNotNull();
 			assertThat(clientHandler.latch.await(TIMEOUT, TimeUnit.SECONDS)).isTrue();
 			String payload = clientHandler.actual.get(1).getPayload();
 			assertThat(payload.startsWith("MESSAGE\n")).isTrue();
@@ -331,13 +333,13 @@ class StompWebSocketIntegrationTests extends AbstractWebSocketIntegrationTests {
 
 		@Override
 		@Bean
-		public AbstractSubscribableChannel clientInboundChannel() {
+		public AbstractSubscribableChannel clientInboundChannel(TaskExecutor clientInboundChannelExecutor) {
 			return new ExecutorSubscribableChannel();  // synchronous
 		}
 
 		@Override
 		@Bean
-		public AbstractSubscribableChannel clientOutboundChannel() {
+		public AbstractSubscribableChannel clientOutboundChannel(TaskExecutor clientOutboundChannelExecutor) {
 			return new ExecutorSubscribableChannel();  // synchronous
 		}
 	}
